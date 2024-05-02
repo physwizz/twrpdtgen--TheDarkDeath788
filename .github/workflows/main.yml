@@ -1,50 +1,72 @@
 name: Make TWRP Device
 
-on: 
-  workflow_dispatch:
-  
-    inputs:
-      IMG_URL:    
-        description: 'IMG_URL'
-        required: true
-        default: ''
+on:
+  workflow_dispatch:
+    inputs:
+      IMG_URL:    
+        description: 'IMG_URL'
+        required: true
+        default: ''
 
 jobs:
-  build:
-    if: github.event.repository.owner.id == github.event.sender.id
-    runs-on: ubuntu-20.04
-    
-    steps:
-    - name: Check Out
-      uses: actions/checkout@main
-      
-    - name: Prepare the environment
-      run: |
-        sudo apt update
-        sudo apt upgrade
-        sudo apt -y install python python2 python3 python3-pip cpio wget
-        sudo apt upgrade
-        pip3 install twrpdtgen
-        mkdir dt
-      
-    - name: Download boot or recovery img
-      run: |
-        aria2c "${{ github.event.inputs.IMG_URL }}"
-        ls
-      
-    - name: Start build
-      run: |
-        python3 -m twrpdtgen -o dt/ *.img
-    - name: ZIP device tree
-      run: |
-        zip -r DeviceTree.zip ./dt
-    - name: Upload to Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          ./DeviceTree.zip
-        name: TWRP_Device_Tree-${{ github.run_id }}
-        tag_name: ${{ github.run_id }}
-        body: DeviceTree for twrp
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  build:
+    if: github.event.repository.owner.id == github.event.sender.id
+    runs-on: ubuntu-20.04
+    
+    steps:
+    - name: Check Out
+      uses: actions/checkout@main
+      
+    - name: Prepare the environment
+      run: |
+        sudo apt update
+        sudo apt upgrade
+        sudo apt -y install python python2 python3 python3-pip cpio wget lz4
+        pip3 install twrpdtgen
+        mkdir dt
+      
+    - name: Download boot or recovery img
+      run: |
+        cd dt
+        aria2c "${{ github.event.inputs.IMG_URL }}"
+        ls
+      
+    - name: Check for LZ4 file
+      run: |
+        cd ~
+        if [[ -n $(find . -maxdepth 1 -name "*.lz4") ]]; then
+          echo "LZ4 file found"
+          lz4 -d *.lz4
+        else
+          echo "No LZ4 file found"
+        fi
+      
+    - name: Search for image file
+      run: |
+        cd ~
+        IMG_FILE=$(find ./dt -type f \( -iname "*.img" -o -iname "*.bin" \))
+        if [[ -n "$IMG_FILE" ]]; then
+          echo "Image file found: $IMG_FILE"
+        else
+          echo "No image file found"
+          exit 1
+        fi
+      
+    - name: Start build
+      run: |
+        python3 -m twrpdtgen -o dt/ "$IMG_FILE"
+      
+    - name: ZIP device tree
+      run: |
+        zip -r DeviceTree.zip ./dt
+      
+    - name: Upload to Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ./DeviceTree.zip
+        name: TWRP_Device_Tree-${{ github.run_id }}
+        tag_name: ${{ github.run_id }}
+        body: DeviceTree for twrp
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
