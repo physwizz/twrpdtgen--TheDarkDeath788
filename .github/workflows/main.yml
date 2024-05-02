@@ -1,6 +1,6 @@
 name: Make TWRP Device
 
-on:
+on: push
   workflow_dispatch:
     inputs:
       IMG_URL:    
